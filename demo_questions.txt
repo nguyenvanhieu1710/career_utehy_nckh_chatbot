@@ -1,0 +1,66 @@
+50 CÂU HỎI DEMO
+==================================
+
+LƯƠNG THEO KHOẢNG:
+1. tìm việc lương từ 10-15 triệu
+2. việc làm lương 20-30 triệu
+3. công việc lương trên 25 triệu
+4. job lương dưới 10 triệu
+5. việc làm lương 15 triệu trở lên
+
+THEO ĐỊA ĐIỂM:
+6. tìm việc làm tại Hà Nội
+7. việc làm ở Hồ Chí Minh
+8. công việc ở Đà Nẵng
+9. job tại Quận 1, TP.HCM
+10. việc làm ở Cầu Giấy, Hà Nội
+11. tìm việc ở Bình Thạnh
+12. công việc tại Thủ Đức
+13. job ở Quận 3, Hà Nội
+
+THEO QUY MÔ CÔNG TY:
+14. việc làm ở công ty lớn
+15. tìm việc ở startup
+16. công việc cho công ty vừa
+17. job ở công ty nhỏ
+18. việc làm tại tập đoàn
+19. tìm việc ở công ty khởi nghiệp
+
+LÀM VIỆC TỪ XA:
+20. tìm việc remote
+21. việc làm từ xa
+22. job work from home
+23. công việc online
+24. việc làm tại nhà
+25. tìm việc hybrid
+26. job flexible working
+
+THEO NGÀNH NGHỀ:
+27. tìm việc IT developer
+28. việc làm marketing digital
+29. công việc kế toán
+30. job nhân sự HR
+31. việc làm kinh doanh sales
+32. tìm việc thiết kế UI/UX
+33. công việc kỹ sư phần mềm
+34. việc làm data analyst
+35. job content creator
+36. tìm việc quản lý dự án
+
+KẾT HỢP NHIỀU BỘ LỌC:
+37. tìm việc IT lương từ 15 triệu ở Hà Nội
+38. việc làm marketing tại TP.HCM lương 10-20 triệu
+39. công ty lớn ở Quận 1 remote lương trên 20 triệu
+40. startup ở Hồ Chí Minh lương cao
+41. việc làm từ xa cho công ty nhỏ lương 8-12 triệu
+42. Python developer ở Đà Nẵng lương từ 12 triệu
+43. job remote marketing lương 15-25 triệu
+44. công ty lớn IT ở Hà Nội lương trên 25 triệu
+45. startup design remote lương 10-15 triệu
+46. việc làm sales tại Quận 3 lương từ 8 triệu
+
+THEO KỸ NĂNG:
+47. tìm việc cần biết Python
+48. việc làm yêu cầu kỹ năng React
+49. công việc cần kinh nghiệm Digital Marketing
+50. job yêu cầu biết SQL

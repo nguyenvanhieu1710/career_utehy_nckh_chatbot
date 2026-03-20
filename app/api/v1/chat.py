@@ -8,6 +8,7 @@ from app.services.llm_service import stream_answer
 from app.services.question_validator import is_question_in_scope, get_rejection_message
 from app.services.intent_classifier import classify_intent, should_include_job_data
 from app.services.optimized_vector_service import semantic_search_optimized, get_jobs_optimized
+from app.services.hybrid_search_service import hybrid_search
 from app.prompt_engine.prompt_builder import build_optimized_prompt
 
 router = APIRouter()
@@ -36,11 +37,18 @@ async def chat_stream(request: ChatRequest):
         intent, category = classify_intent(user_message)
         logger.info(f"Intent: {intent.value}, Category: {category.value if category else None}")
         
-        # Step 3: Conditional job search
+        # Step 3: Conditional job search with Hybrid Search
         job_context = []
         if should_include_job_data(intent):
-            job_ids = await semantic_search_optimized(user_message, category, top_k=3)
-            job_context = await get_jobs_optimized(job_ids, category)
+            try:
+                # Use Hybrid Search directly
+                job_context = await hybrid_search(user_message, top_k=3, category=category, enable_hybrid=True)
+                logger.info(f"Hybrid search retrieved {len(job_context)} jobs")
+            except Exception as e:
+                logger.warning(f"Hybrid search failed, falling back to vector-only: {str(e)}")
+                job_ids = await semantic_search_optimized(user_message, category, top_k=3)
+                job_context = await get_jobs_optimized(job_ids, category)
+            
             logger.info(f"Retrieved {len(job_context)} jobs for category {category.value if category else None}")
         else:
             logger.info("Skipping job search for consultation")
