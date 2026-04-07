@@ -17,6 +17,9 @@ class Settings:
     # Vector storage
     FAISS_INDEX_DIR: str = os.getenv("FAISS_INDEX_DIR", "")
     
+    # Server settings
+    PORT: int = int(os.getenv("PORT", ""))
+
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "")
 

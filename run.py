@@ -6,6 +6,7 @@ import uvicorn
 import os
 import sys
 from dotenv import load_dotenv
+from app.core.config import settings
 
 def main():
     """Run the development server"""
@@ -13,16 +14,16 @@ def main():
     load_dotenv()
     
     print("🚀 Starting Chatbot Service in Development Mode")
-    print("📍 Service will be available at: http://localhost:8001")
-    print("📖 API docs at: http://localhost:8001/docs")
-    print("🔍 Health check: http://localhost:8001/health")
+    print(f"📍 Service will be available at: http://localhost:{settings.PORT}")
+    print(f"📖 API docs at: http://localhost:{settings.PORT}/docs")
+    print(f"🔍 Health check: http://localhost:{settings.PORT}/health")
     print("\n" + "="*50 + "\n")
     
     try:
         uvicorn.run(
             "app.main:app",
             host="0.0.0.0",
-            port=8001,
+            port=settings.PORT,
             reload=True,
             log_level="info",
             access_log=True
