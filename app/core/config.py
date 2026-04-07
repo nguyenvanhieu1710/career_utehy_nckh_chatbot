@@ -8,10 +8,8 @@ class Settings:
     MONGODB_URL: str = os.getenv("MONGODB_URL", "")
     MONGODB_DB_NAME: str = os.getenv("MONGODB_DB_NAME", "")
     
-    # Ollama settings
-    OLLAMA_URL: str = os.getenv("OLLAMA_URL", "")
-    OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "")
-    OLLAMA_TIMEOUT: int = int(os.getenv("OLLAMA_TIMEOUT", ""))
+    # Gemini settings
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     
     # CORS settings
     ALLOWED_ORIGINS: List[str] = ["*"]
