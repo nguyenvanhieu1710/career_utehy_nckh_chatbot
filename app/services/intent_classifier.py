@@ -177,14 +177,9 @@ def get_category_filter(category: JobCategory) -> List[str]:
 def should_include_job_data(intent: IntentType) -> bool:
     """
     Xác định có nên include job data vào prompt không
-    
-    Args:
-        intent: Loại ý định
-        
-    Returns:
-        bool: True nếu cần job data, False nếu không cần
+    Luôn trả về True để tăng tính thực tế của lời tư vấn
     """
-    return intent == IntentType.JOB_SUGGESTION
+    return intent in [IntentType.JOB_SUGGESTION, IntentType.CONSULTATION]
 
 
 def get_optimized_prompt_instruction(intent: IntentType, category: Optional[JobCategory]) -> str:
@@ -199,15 +194,17 @@ def get_optimized_prompt_instruction(intent: IntentType, category: Optional[JobC
         str: Instruction cho prompt
     """
     if intent == IntentType.CONSULTATION:
-        return """
-===== YÊU CẦU TRẢ LỜI (Tư vấn chung) =====
-Hãy đưa ra lời tư vấn nghề nghiệp chung:
+        category_name = category.value if category else "các lĩnh vực liên quan"
+        return f"""
+===== YÊU CẦU TRẢ LỜI (Tư vấn nghề nghiệp - {category_name}) =====
+Hãy đưa ra lời tư vấn chuyên sâu dựa trên dữ liệu thực tế:
 
-1. Phân tích câu hỏi (1-2 câu)
-2. Lời khuyên cụ thể (3-5 gợi ý)
-3. Hướng dẫn bước tiếp theo
+1. Phân tích câu hỏi: Đưa ra nhận định dựa trên xu hướng thị trường (1-2 câu).
+2. Lời khuyên cụ thể: Các kỹ năng và lộ trình cần tập trung.
+3. MINH HỌA THỰC TẾ: Sử dụng thông tin từ danh sách công việc được cung cấp để đưa ra các ví dụ cụ thể về yêu cầu thực tế của nhà tuyển dụng.
+4. Hướng dẫn bước tiếp theo.
 
-LƯU Ý: Không cần liệt kê công việc cụ thể, tập trung vào tư vấn và hướng dẫn.
+LƯU Ý: Tuyệt đối không trả lời chung chung. Hãy dùng các job thực tế làm dẫn chứng cho lời khuyên.
 """
     
     elif intent == IntentType.JOB_SUGGESTION:

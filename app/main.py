@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 from app.api.v1 import chat
 from app.core.config import settings
 from app.core.logging_config import setup_logging
-from app.core.mongodb import connect_to_mongo, close_mongo_connection
 from app.services.vector_service import load_faiss_index, build_faiss_index
 import logging
 
@@ -17,9 +16,6 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting up Chatbot Service...")
     
-    # Connect to MongoDB
-    await connect_to_mongo()
-    
     # Load or build FAISS index
     if not load_faiss_index():
         logger.info("FAISS index not found, building new index...")
@@ -31,7 +27,6 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down...")
-    await close_mongo_connection()
 
 # Create FastAPI app
 app = FastAPI(

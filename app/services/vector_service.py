@@ -1,7 +1,8 @@
 import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from app.core.mongodb import get_database
+from app.core.database import SessionLocal
+from sqlalchemy import text
 from app.core.config import settings
 import logging
 import os
@@ -28,44 +29,46 @@ FAISS_METADATA_FILE = os.path.join(settings.FAISS_INDEX_DIR, "metadata.pkl")
 # Ensure storage directory exists
 os.makedirs(settings.FAISS_INDEX_DIR, exist_ok=True)
 
-
 async def fetch_all_jobs_for_indexing():
     """
-    Fetch all jobs from MongoDB for FAISS indexing
-    Query from 'companies' collection, extract jobs array
+    Fetch all jobs from PostgreSQL for FAISS indexing
     """
     try:
-        db = get_database()
-        companies_collection = db["companies"]
-        
-        # Get all companies with jobs
-        companies = await companies_collection.find({}).to_list(length=None)
-        
-        job_list = []
-        
-        for company in companies:
-            company_name = company.get("name", "Unknown Company")
-            jobs = company.get("jobs", [])
+        async with SessionLocal() as db:
+            query = text("""
+                SELECT 
+                    j.id, 
+                    j.title, 
+                    c.name as company_name, 
+                    j.description, 
+                    j.skills, 
+                    j.location, 
+                    j.requirements 
+                FROM jobs j
+                JOIN companies c ON j.company_id = c.id
+                WHERE j.status = 'approved' AND j.action_status = 'active'
+            """)
             
-            for job in jobs:
-                # Only index OPEN jobs (equivalent to "approved")
-                if job.get("status") != "OPEN":
-                    continue
-                
+            result = await db.execute(query)
+            rows = result.fetchall()
+            
+            job_list = []
+            for row in rows:
+                # row is a tuple, or potentially a Row object with keys
                 job_list.append({
-                    "id": job.get("id", ""),
-                    "title": job.get("title", ""),
-                    "company": company_name,
-                    "description": job.get("description", ""),
-                    "skills": ", ".join(job.get("skills", [])) if isinstance(job.get("skills"), list) else str(job.get("skills", "")),
-                    "location": job.get("location", ""),
-                    "requirements": ", ".join(job.get("requirements", [])) if isinstance(job.get("requirements"), list) else str(job.get("requirements", ""))
+                    "id": str(row.id),
+                    "title": row.title,
+                    "company": row.company_name,
+                    "description": row.description or "",
+                    "skills": str(row.skills) if row.skills else "",
+                    "location": row.location or "",
+                    "requirements": row.requirements or ""
                 })
-        
-        return job_list
-        
+            
+            return job_list
+            
     except Exception as e:
-        logger.error(f"Failed to fetch jobs from MongoDB: {str(e)}", exc_info=True)
+        logger.error(f"Failed to fetch jobs from PostgreSQL: {str(e)}", exc_info=True)
         return []
 
 

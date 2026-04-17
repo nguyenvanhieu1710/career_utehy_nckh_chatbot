@@ -8,6 +8,9 @@ class Settings:
     MONGODB_URL: str = os.getenv("MONGODB_URL", "")
     MONGODB_DB_NAME: str = os.getenv("MONGODB_DB_NAME", "")
     
+    # PostgreSQL settings
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+    
     # Gemini settings
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     
