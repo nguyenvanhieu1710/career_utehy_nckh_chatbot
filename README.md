@@ -3,9 +3,9 @@
 ## Tính năng
 
 - **Intent Classification**: Phân loại ý định người dùng (tư vấn chung vs gợi ý công việc)
-- **Semantic Search**: Tìm kiếm công việc bằng FAISS vector search
+- **Semantic Search**: Tìm kiếm công việc bằng Milvus Cloud vector search
 - **Question Validation**: Kiểm tra câu hỏi có trong phạm vi tư vấn nghề nghiệp
-- **Streaming Response**: Trả lời real-time từ Ollama LLM
+- **Streaming Response**: Trả lời real-time từ Gemini AI (Google GenAI SDK)
 - **Category Optimization**: Tối ưu tìm kiếm theo lĩnh vực công việc
 
 ## Cấu trúc
@@ -17,11 +17,12 @@ app/
 ├── core/                     # Core configuration
 ├── models/chat.py            # Pydantic models
 ├── services/                 # Business logic
-│   ├── llm_service.py        # Ollama integration
+│   ├── llm_service.py        # Gemini AI integration (SDK 2.0)
 │   ├── intent_classifier.py  # Intent classification
 │   ├── question_validator.py # Question validation
-│   ├── vector_service.py     # FAISS vector search
-│   └── optimized_vector_service.py
+│   ├── vector_service.py     # Milvus Cloud vector search
+│   ├── hybrid_search_service.py # Vector + SQL Hybrid Search
+│   └── parallel_hybrid_search.py # Optimized parallel execution
 └── prompt_engine/            # Prompt building
     ├── system_prompt.py
     └── prompt_builder.py
@@ -33,7 +34,7 @@ app/
 
 ```bash
 # Clone và cài đặt dependencies
-cd Project/chatbot
+cd career_utehy_nckh_chatbot
 pip install -r requirements.txt
 
 # Copy environment file
@@ -61,16 +62,16 @@ Content-Type: application/json
 }
 ```
 
-### FAISS Statistics
+### Milvus Statistics
 
 ```
-GET /api/v1/chat/faiss-stats
+GET /api/v1/chat/milvus-stats
 ```
 
-### Rebuild Index
+### Sync Data to Milvus
 
 ```
-POST /api/v1/chat/rebuild-index
+POST /api/v1/chat/sync-milvus
 ```
 
 ### Health Check
@@ -83,17 +84,15 @@ GET /health
 
 ### Environment Variables
 
-- `MONGODB_URL`: MongoDB connection string
-- `MONGODB_DB_NAME`: Database name
-- `OLLAMA_URL`: Ollama API endpoint
-- `OLLAMA_MODEL`: Model name (e.g., llama2)
-- `OLLAMA_TIMEOUT`: Request timeout in seconds
-- `FAISS_INDEX_DIR`: Directory for FAISS storage
+- `MILVUS_URL`: Milvus Cloud endpoint
+- `MILVUS_TOKEN`: Milvus Cloud authentication token
+- `MILVUS_COLLECTION`: Collection name for job vectors
+- `GEMINI_API_KEY`: Google Gemini API Key
 - `LOG_LEVEL`: Logging level (INFO, DEBUG, etc.)
 
 ### Dependencies
 
-- **MongoDB**: Job data storage
-- **Ollama**: LLM for response generation
-- **FAISS**: Vector similarity search
-- **Sentence Transformers**: Text embeddings
+- **PostgreSQL**: Primary job data storage
+- **Milvus Cloud**: Vector similarity search (Zilliz)
+- **Gemini AI**: LLM for response generation and Text Embeddings
+- **FastAPI**: Modern web framework

@@ -1,6 +1,6 @@
 """
-Hybrid Search Service
-Kết hợp Vector Search (FAISS) + SQL filtering (PostgreSQL) cho kết quả tối ưu
+Hybrid Search Service - Milvus Cloud Edition
+Kết hợp Semantic Search (Milvus) + Metadata Filtering (PostgreSQL)
 """
 import asyncio
 import time
@@ -10,211 +10,200 @@ from sqlalchemy import text
 
 from app.services.filter_detector import detect_job_filters, JobFilter
 from app.services.sql_generator import build_postgres_query
-from app.services.vector_service import semantic_search
-from app.services.optimized_vector_service import semantic_search_optimized, get_jobs_optimized
+from app.services.vector_service import (
+    semantic_search,
+    get_job_details,
+    _format_salary
+)
 from app.core.database import SessionLocal
 from app.services.intent_classifier import JobCategory
 
 logger = logging.getLogger(__name__)
 
-
-def _format_salary(salary_display: Optional[str], salary_min: Optional[float], salary_max: Optional[float]) -> str:
-    sd = (salary_display or "").strip()
-    if sd and sd not in {"0", "0-0", "0-0tr", "0-0 tr"}:
-        return sd
-
-    sm = salary_min or 0
-    sx = salary_max or 0
-    if sm > 0 and sx > 0:
-        return f"{sm/1000000:.0f}-{sx/1000000:.0f}tr"
-    if sm > 0:
-        return f"{sm/1000000:.0f}tr+"
-    return "Thỏa thuận"
+# Timeout cho Milvus Cloud vector search (giây)
+VECTOR_SEARCH_TIMEOUT = 5.0
 
 
 class HybridSearchService:
-    """Service kết hợp vector search và SQL filtering"""
-    
+    """
+    Service kết hợp vector search (Milvus) + SQL filtering (PostgreSQL).
+    Chạy vector search với timeout để tránh block, tự động fallback sang SQL nếu timeout.
+    """
+
     def __init__(self):
         self.performance_stats = {
             "total_searches": 0,
-            "vector_only_fallbacks": 0,
-            "sql_only_fallbacks": 0,
+            "vector_only": 0,
             "hybrid_successes": 0,
-            "avg_response_time": 0
+            "sql_only_fallbacks": 0,
+            "timeout_fallbacks": 0,
+            "avg_response_time": 0.0
         }
-    
+
     async def hybrid_search(
-        self, 
-        query: str, 
+        self,
+        query: str,
         top_k: int = 5,
-        category: Optional[JobCategory] = None,
+        category: Optional[Any] = None,
         enable_hybrid: bool = True
     ) -> List[Dict[str, Any]]:
         """
-        Hybrid search kết hợp vector + SQL
+        Hybrid search kết hợp vector + SQL với parallel execution và timeout.
+
+        Flow:
+        1. Detect filters từ query (nhanh, sync)
+        2. Chạy vector search (Milvus) với timeout
+        3. Nếu có filters → SQL filter trên kết quả vector
+        4. Fallback sang pure SQL nếu vector timeout hoặc rỗng
         """
         start_time = time.time()
         self.performance_stats["total_searches"] += 1
-        
+
+        # Normalize category enum → string
+        cat_str = category.value if hasattr(category, 'value') else str(category) if category else None
+
         try:
-            if not enable_hybrid:
-                return await self._vector_search_fallback(query, top_k, category)
-            
-            # Step 1: Detect filters
+            # Bước 1: Detect filters (sync, fast)
             job_filter = detect_job_filters(query)
-            
-            # Step 2: Choose search strategy
-            if job_filter.has_filters():
-                results = await self._hybrid_search_with_filters(query, job_filter, top_k, category)
+
+            # Bước 2: Vector search với timeout
+            candidate_k = min(top_k * 10, 100) if (enable_hybrid and job_filter.has_filters()) else top_k
+
+            try:
+                vector_task = asyncio.create_task(
+                    semantic_search(query, category=cat_str, top_k=candidate_k)
+                )
+                job_ids = await asyncio.wait_for(vector_task, timeout=VECTOR_SEARCH_TIMEOUT)
+            except asyncio.TimeoutError:
+                logger.warning(f"Vector search timed out after {VECTOR_SEARCH_TIMEOUT}s, falling back to SQL")
+                self.performance_stats["timeout_fallbacks"] += 1
+                return await self._sql_search_fallback(job_filter, top_k)
+
+            # Bước 3: Routing dựa trên kết quả vector + filters
+            if not job_ids:
+                logger.info("Vector search returned empty, falling back to SQL")
+                self.performance_stats["sql_only_fallbacks"] += 1
+                return await self._sql_search_fallback(job_filter, top_k)
+
+            if enable_hybrid and job_filter.has_filters():
+                results = await self._filter_candidates_by_sql(job_ids, job_filter, top_k)
                 self.performance_stats["hybrid_successes"] += 1
             else:
-                results = await self._vector_search_fallback(query, top_k, category)
-            
-            # Update performance stats
-            response_time = time.time() - start_time
-            self._update_performance_stats(response_time)
-            
+                results = await get_job_details(job_ids[:top_k])
+                self.performance_stats["vector_only"] += 1
+
+            elapsed = time.time() - start_time
+            self._update_avg_response_time(elapsed)
+            logger.info(f"Hybrid search completed in {elapsed:.3f}s | results={len(results)}")
             return results
-            
+
         except Exception as e:
             logger.error(f"Hybrid search failed: {str(e)}", exc_info=True)
-            return await self._vector_search_fallback(query, top_k, category)
-    
-    async def _hybrid_search_with_filters(
-        self,
-        query: str,
-        job_filter: JobFilter,
-        top_k: int,
-        category: Optional[JobCategory] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        Hybrid search với filters - Vector-first approach
-        """
-        try:
-            candidate_k = min(top_k * 4, 50)
-            candidate_job_ids = await semantic_search_optimized(query, category, top_k=candidate_k)
-            
-            if not candidate_job_ids:
-                return await self._sql_search_fallback(query, job_filter, top_k)
-            
-            filtered_jobs = await self._filter_candidates_by_sql(candidate_job_ids, job_filter, top_k * 2)
-            
-            if not filtered_jobs:
-                return await self._sql_search_fallback(query, job_filter, top_k)
-            
-            final_results = await self._rerank_by_relevance(query, filtered_jobs, top_k)
-            return final_results[:top_k]
-            
-        except Exception as e:
-            logger.error(f"Hybrid search with filters failed: {str(e)}")
-            return await self._sql_search_fallback(query, job_filter, top_k)
-    
+            # Safe fallback: thuần vector, không filter
+            job_ids = await semantic_search(query, category=cat_str, top_k=top_k)
+            return await get_job_details(job_ids)
+
     async def _filter_candidates_by_sql(
         self,
         candidate_job_ids: List[str],
         job_filter: JobFilter,
         limit: int
     ) -> List[Dict[str, Any]]:
-        """
-        Filter candidates bằng SQL query từ PostgreSQL
-        """
+        """Filter Milvus candidates bằng SQL (fast vì đã có IDs)"""
         try:
             where_clause, params = build_postgres_query(job_filter)
-            params["job_ids"] = tuple(candidate_job_ids)
-            
+
             async with SessionLocal() as db:
-                query = text(f"""
-                    SELECT 
-                        j.id, j.title, c.name as company, j.description, 
+                sql = text(f"""
+                    SELECT
+                        j.id, j.title, c.name as company, j.description,
                         j.skills, j.location, j.requirements, j.salary_display,
                         j.salary_min, j.salary_max, j.work_arrangement
-                    FROM jobs j
-                    JOIN companies c ON j.company_id = c.id
-                    WHERE j.id = ANY(CAST(:job_ids AS uuid[])) AND {where_clause}
+                    FROM jobs j JOIN companies c ON j.company_id = c.id
+                    WHERE j.id = ANY(CAST(:ids AS uuid[])) AND ({where_clause})
                     LIMIT :limit
                 """)
-                params["limit"] = limit * 2
-                
-                result = await db.execute(query, params)
-                rows = result.fetchall()
-                
+                params["ids"] = candidate_job_ids
+                params["limit"] = limit
+
+                rows = (await db.execute(sql, params)).fetchall()
+
+                # Giữ thứ tự relevance từ Milvus
+                job_map = {
+                    str(r.id): {
+                        "id": str(r.id),
+                        "title": r.title,
+                        "company": r.company,
+                        "description": r.description or "",
+                        "skills": r.skills or "",
+                        "location": r.location or "",
+                        "requirements": r.requirements or "",
+                        "salary": _format_salary(r.salary_display, r.salary_min, r.salary_max),
+                        "work_arrangement": r.work_arrangement
+                    } for r in rows
+                }
+                return [job_map[jid] for jid in candidate_job_ids if jid in job_map]
+
+        except Exception as e:
+            logger.error(f"SQL filtering failed: {e}")
+            return await get_job_details(candidate_job_ids[:limit])
+
+    async def _sql_search_fallback(self, job_filter: JobFilter, top_k: int) -> List[Dict[str, Any]]:
+        """Pure SQL search — dùng khi vector search không available"""
+        try:
+            where_clause, params = build_postgres_query(job_filter)
+            async with SessionLocal() as db:
+                sql = text(f"""
+                    SELECT j.id, j.title, c.name as company, j.location,
+                           j.salary_display, j.salary_min, j.salary_max,
+                           j.work_arrangement, j.description, j.skills, j.requirements
+                    FROM jobs j JOIN companies c ON j.company_id = c.id
+                    WHERE {where_clause} LIMIT :limit
+                """)
+                params["limit"] = top_k
+                rows = (await db.execute(sql, params)).fetchall()
                 return [
                     {
                         "id": str(r.id),
                         "title": r.title,
                         "company": r.company,
-                        "description": r.description,
-                        "skills": r.skills,
-                        "location": r.location,
-                        "requirements": r.requirements,
+                        "location": r.location or "",
                         "salary": _format_salary(r.salary_display, r.salary_min, r.salary_max),
-                        "salaryMin": r.salary_min,
-                        "salaryMax": r.salary_max
-                    } for r in rows
+                        "work_arrangement": r.work_arrangement or "",
+                        "description": r.description or "",
+                        "skills": r.skills or "",
+                        "requirements": r.requirements or ""
+                    }
+                    for r in rows
                 ]
         except Exception as e:
-            logger.error(f"SQL filtering failed: {str(e)}")
+            logger.error(f"SQL fallback failed: {e}")
             return []
 
-    async def _rerank_by_relevance(self, query: str, jobs: List[Dict[str, Any]], top_k: int) -> List[Dict[str, Any]]:
-        from app.services.vector_service import embedding_model
-        import numpy as np
-        
-        job_texts = [f"{j['title']} {j['company']} {j['description']} {j['skills']}" for j in jobs]
-        job_embeddings = embedding_model.encode(job_texts, convert_to_numpy=True)
-        query_embedding = embedding_model.encode([query])
-        similarities = np.dot(job_embeddings, query_embedding.T).flatten()
-        
-        for i, job in enumerate(jobs):
-            job["relevance_score"] = float(similarities[i])
-            
-        jobs.sort(key=lambda x: x["relevance_score"], reverse=True)
-        return jobs[:top_k]
-
-    async def _vector_search_fallback(self, query: str, top_k: int, category: Optional[JobCategory] = None) -> List[Dict[str, Any]]:
-        self.performance_stats["vector_only_fallbacks"] += 1
-        job_ids = await semantic_search_optimized(query, category, top_k)
-        return await get_jobs_optimized(job_ids, category)
-
-    async def _sql_search_fallback(self, query: str, job_filter: JobFilter, top_k: int) -> List[Dict[str, Any]]:
-        self.performance_stats["sql_only_fallbacks"] += 1
-        where_clause, params = build_postgres_query(job_filter)
-        
-        async with SessionLocal() as db:
-            sql = text(f"""
-                SELECT j.id, j.title, c.name as company, j.description, j.location
-                FROM jobs j JOIN companies c ON j.company_id = c.id
-                WHERE {where_clause} LIMIT :limit
-            """)
-            params["limit"] = top_k
-            result = await db.execute(sql, params)
-            rows = result.fetchall()
-            return [{"id": str(r.id), "title": r.title, "company": r.company, "location": r.location} for r in rows]
-
-    def _update_performance_stats(self, response_time: float):
+    def _update_avg_response_time(self, response_time: float):
         total = self.performance_stats["total_searches"]
         current_avg = self.performance_stats["avg_response_time"]
-        self.performance_stats["avg_response_time"] = ((current_avg * (total - 1)) + response_time) / total
+        self.performance_stats["avg_response_time"] = (
+            (current_avg * (total - 1) + response_time) / total
+        )
 
     def get_performance_stats(self) -> Dict[str, Any]:
         return self.performance_stats.copy()
-
-    def reset_performance_stats(self):
-        self.performance_stats = {k: 0 for k in self.performance_stats}
 
 
 # Singleton instance
 hybrid_search_service = HybridSearchService()
 
-from app.services.parallel_hybrid_search import parallel_hybrid_search
 
-async def hybrid_search(query: str, top_k: int = 5, category: Optional[str] = None, enable_hybrid: bool = True) -> List[Dict[str, Any]]:
-    # Sử dụng parallel implementation để tối ưu hiệu năng
-    return await parallel_hybrid_search(query, top_k, category, enable_hybrid)
+# Public API — dùng trực tiếp trong chat.py
+async def hybrid_search(
+    query: str,
+    top_k: int = 5,
+    category: Optional[Any] = None,
+    enable_hybrid: bool = True
+) -> List[Dict[str, Any]]:
+    return await hybrid_search_service.hybrid_search(query, top_k, category, enable_hybrid)
+
 
 def get_hybrid_performance_stats() -> Dict[str, Any]:
     return hybrid_search_service.get_performance_stats()
-
-def reset_hybrid_performance_stats():
-    hybrid_search_service.reset_performance_stats()

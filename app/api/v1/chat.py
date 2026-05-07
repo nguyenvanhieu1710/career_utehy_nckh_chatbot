@@ -1,14 +1,17 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from typing import AsyncGenerator
 import logging
 
 from app.models.chat import ChatRequest, ChatResponse
-from app.services.vector_service import build_faiss_index, get_faiss_stats
-from app.services.llm_service import stream_answer
-from app.services.question_validator import is_question_in_scope, get_rejection_message
-from app.services.intent_classifier import classify_intent, should_include_job_data
-from app.services.optimized_vector_service import semantic_search_optimized, get_jobs_optimized
+from app.services.vector_service import (
+    sync_to_milvus,
+    get_milvus_stats
+)
 from app.services.hybrid_search_service import hybrid_search
+from app.services.intent_classifier import classify_intent, IntentType
+from app.services.question_validator import is_question_in_scope, get_rejection_message
+from app.services.llm_service import stream_answer
 from app.prompt_engine.prompt_builder import build_optimized_prompt
 
 router = APIRouter()
@@ -17,74 +20,66 @@ logger = logging.getLogger(__name__)
 @router.post("/stream")
 async def chat_stream(request: ChatRequest):
     """
-    Chat with streaming response - Optimized with Intent Classification
+    Chat Streaming endpoint:
+    1. Validate câu hỏi
+    2. Classify intent (tư vấn vs tìm việc)
+    3. Hybrid Search nếu cần job data
+    4. Build prompt & stream câu trả lời từ Gemini
     """
-    try:
-        user_message = request.message
-        
-        # Step 1: Validate question scope
-        is_valid, reason = is_question_in_scope(user_message)
-        if not is_valid:
-            async def rejection_stream():
+    async def generate() -> AsyncGenerator[str, None]:
+        try:
+            # Bước 1: Validate câu hỏi có liên quan nghề nghiệp không
+            is_valid, reason = is_question_in_scope(request.message)
+            if not is_valid:
                 yield get_rejection_message(reason)
-            
-            return StreamingResponse(
-                rejection_stream(),
-                media_type="text/plain; charset=utf-8"
+                return
+
+            # Bước 2: Classify intent
+            intent, category = classify_intent(request.message)
+
+            # Bước 3: Lấy job data nếu cần
+            job_context = None
+            if intent == IntentType.JOB_SUGGESTION:
+                job_context = await hybrid_search(
+                    query=request.message,
+                    top_k=request.top_k if hasattr(request, 'top_k') else 5,
+                    category=category,
+                    enable_hybrid=True
+                )
+
+            # Bước 4: Build prompt và stream câu trả lời
+            prompt = build_optimized_prompt(
+                user_message=request.message,
+                intent=intent,
+                job_context=job_context,
+                category=category
             )
-        
-        # Step 2: Classify intent
-        intent, category = classify_intent(user_message)
-        logger.info(f"Intent: {intent.value}, Category: {category.value if category else None}")
-        
-        # Step 3: Conditional job search with Hybrid Search
-        job_context = []
-        if should_include_job_data(intent):
-            try:
-                # Use Hybrid Search directly
-                job_context = await hybrid_search(user_message, top_k=3, category=category, enable_hybrid=True)
-                logger.info(f"Hybrid search retrieved {len(job_context)} jobs")
-            except Exception as e:
-                logger.warning(f"Hybrid search failed, falling back to vector-only: {str(e)}")
-                job_ids = await semantic_search_optimized(user_message, category, top_k=3)
-                job_context = await get_jobs_optimized(job_ids, category)
-            
-            logger.info(f"Retrieved {len(job_context)} jobs for category {category.value if category else None}")
-        else:
-            logger.info("Skipping job search for consultation")
-        
-        # Step 4: Build optimized prompt
-        prompt = build_optimized_prompt(user_message, intent, job_context, category)
-        
-        # Step 5: Stream LLM response
-        return StreamingResponse(
-            stream_answer(prompt),
-            media_type="text/plain; charset=utf-8"
-        )
-        
-    except Exception as e:
-        logger.error(f"Chat stream error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
 
-@router.get("/faiss-stats")
+            for chunk in stream_answer(prompt):
+                yield chunk
+
+        except Exception as e:
+            logger.error(f"Chat stream error: {str(e)}", exc_info=True)
+            yield "Đã xảy ra lỗi. Vui lòng thử lại sau."
+
+    return StreamingResponse(generate(), media_type="text/plain")
+
+
+@router.get("/milvus-stats")
 async def get_vector_stats():
-    """Get FAISS index statistics"""
-    try:
-        return get_faiss_stats()
-    except Exception as e:
-        logger.error(f"Failed to get FAISS stats: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get vector statistics")
+    """Get statistics from Milvus Cloud collection"""
+    stats = get_milvus_stats()
+    if stats:
+        return stats
+    raise HTTPException(status_code=500, detail="Failed to get Milvus stats")
 
-@router.post("/rebuild-index")
-async def rebuild_index():
-    """Rebuild FAISS index from database"""
-    try:
-        await build_faiss_index()
-        stats = get_faiss_stats()
-        return {
-            "message": "FAISS index rebuilt successfully",
-            "stats": stats
-        }
-    except Exception as e:
-        logger.error(f"Failed to rebuild index: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to rebuild index")
+
+@router.post("/sync-milvus")
+async def sync_milvus_endpoint():
+    """
+    Trigger synchronization of PostgreSQL jobs to Milvus Cloud.
+    """
+    success = await sync_to_milvus()
+    if success:
+        return {"message": "Data synchronized to Milvus Cloud successfully"}
+    raise HTTPException(status_code=500, detail="Failed to sync data to Milvus")

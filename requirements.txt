@@ -1,17 +1,26 @@
+# Web Framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-pydantic==2.5.0
+
+# Database - MongoDB
 motor==3.3.2
 pymongo==4.6.0
-sentence-transformers>=2.7.0
-transformers>=4.36.0
-huggingface_hub>=0.21.0
-faiss-cpu>=1.12.0
-numpy>=1.24.3,<2.0.0
-requests==2.31.0
-python-multipart==0.0.6
-torch>=2.1.0
-python-dotenv==1.0.0
-google-generativeai>=0.4.0
+
+# Database - PostgreSQL
 sqlalchemy==2.0.43
 asyncpg==0.30.0
+
+# AI & Vector Search
+google-genai>=1.4.0          # LLM: dùng cho generate_content/chat streaming
+sentence-transformers>=2.7.0 # Embedding: BGE-M3 local
+pymilvus>=2.4.0
+
+# Utilities
+pydantic==2.11.10
+numpy>=1.24.3,<2.0.0
+setuptools==69.5.1
+marshmallow==3.19.0
+environs==9.5.0
+requests==2.31.0
+python-multipart==0.0.6
+python-dotenv==1.0.0

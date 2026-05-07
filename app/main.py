@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from app.api.v1 import chat
 from app.core.config import settings
 from app.core.logging_config import setup_logging
-from app.services.vector_service import load_faiss_index, build_faiss_index
+from app.services.vector_service import ensure_collection_exists
 import logging
 
 # Setup logging
@@ -16,10 +16,14 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting up Chatbot Service...")
     
-    # Load or build FAISS index
-    if not load_faiss_index():
-        logger.info("FAISS index not found, building new index...")
-        await build_faiss_index()
+    # Ensure Milvus collection exists
+    try:
+        if ensure_collection_exists():
+            logger.info("Milvus Cloud connection verified.")
+        else:
+            logger.error("Failed to verify Milvus Cloud connection.")
+    except Exception as e:
+        logger.error(f"Error during Milvus initialization: {e}")
     
     logger.info("Startup complete")
     
