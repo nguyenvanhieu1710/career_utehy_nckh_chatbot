@@ -87,14 +87,26 @@ class HybridSearchService:
 
             if enable_hybrid and job_filter.has_filters():
                 results = await self._filter_candidates_by_sql(job_ids, job_filter, top_k)
+                logger.info(f"[Hybrid] Vector({len(job_ids)}) → SQL filter → {len(results)} results")
+
+                # Bổ sung từ SQL nếu Hybrid trả về quá ít
+                if len(results) < top_k:
+                    supplement = await self._sql_search_fallback(job_filter, top_k - len(results))
+                    existing_ids = {r["id"] for r in results}
+                    for job in supplement:
+                        if job["id"] not in existing_ids:
+                            results.append(job)
+                    logger.info(f"[Hybrid] Supplemented with SQL fallback → total {len(results)} results")
+
                 self.performance_stats["hybrid_successes"] += 1
             else:
                 results = await get_job_details(job_ids[:top_k])
+                logger.info(f"[Vector-only] Returned {len(results)} results")
                 self.performance_stats["vector_only"] += 1
 
             elapsed = time.time() - start_time
             self._update_avg_response_time(elapsed)
-            logger.info(f"Hybrid search completed in {elapsed:.3f}s | results={len(results)}")
+            logger.info(f"Search completed in {elapsed:.3f}s | path={'hybrid' if job_filter.has_filters() else 'vector'} | results={len(results)}")
             return results
 
         except Exception as e:
