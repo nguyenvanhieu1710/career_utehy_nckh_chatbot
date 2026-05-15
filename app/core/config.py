@@ -11,9 +11,11 @@ class Settings:
     # PostgreSQL settings
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
     
-    # AI / LLM settings (Gemini for generate_content, BGE-M3 for embeddings)
+    # AI / LLM settings
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL")
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY")
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
     EMBEDDING_MODEL_NAME: str = os.getenv("EMBEDDING_MODEL_NAME")
     HF_TOKEN: str = os.getenv("HF_TOKEN")
     
@@ -23,7 +25,7 @@ class Settings:
     # Milvus settings
     MILVUS_URL: str = os.getenv("MILVUS_URL", "")
     MILVUS_TOKEN: str = os.getenv("MILVUS_TOKEN", "")
-    MILVUS_COLLECTION: str = os.getenv("MILVUS_COLLECTION", "chatbot_jobs_gemini")
+    MILVUS_COLLECTION: str = os.getenv("MILVUS_COLLECTION", "career_jobs_chatbot")
     
     # Server settings
     PORT: int = int(os.getenv("PORT", ""))

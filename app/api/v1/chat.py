@@ -37,7 +37,7 @@ async def chat_stream(request: ChatRequest):
                 return
 
             # Bước 2: Classify intent
-            intent, category = classify_intent(request.message)
+            intent, category = await classify_intent(request.message)
 
             # Bước 3: Lấy job data nếu cần
             job_context = None
@@ -45,7 +45,7 @@ async def chat_stream(request: ChatRequest):
             if intent == IntentType.JOB_SUGGESTION:
                 job_context = await hybrid_search(
                     query=request.message,
-                    top_k=request.top_k if hasattr(request, 'top_k') else 5,
+                    top_k=3,
                     category=category,
                     enable_hybrid=True
                 )
@@ -60,7 +60,7 @@ async def chat_stream(request: ChatRequest):
             )
 
             ttft_measured = False
-            for chunk in stream_answer(prompt):
+            async for chunk in stream_answer(prompt):
                 if not ttft_measured:
                     ttft = time.time() - start_time
                     logger.info(f"[PERF] TTFT: {ttft:.3f}s | Search: {search_duration:.3f}s | Intent: {intent}")

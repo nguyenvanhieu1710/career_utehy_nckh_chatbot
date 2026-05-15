@@ -11,8 +11,9 @@ sqlalchemy==2.0.43
 asyncpg==0.30.0
 
 # AI & Vector Search
-google-genai>=1.4.0          # LLM: dùng cho generate_content/chat streaming
-sentence-transformers>=2.7.0 # Embedding: BGE-M3 local
+google-genai>=1.4.0
+groq>=0.5.0
+sentence-transformers>=2.7.0
 pymilvus>=2.4.0
 
 # Utilities

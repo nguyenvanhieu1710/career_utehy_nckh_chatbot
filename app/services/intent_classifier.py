@@ -112,18 +112,49 @@ CATEGORY_KEYWORDS = {
 }
 
 
-def classify_intent(message: str) -> Tuple[IntentType, Optional[JobCategory]]:
+async def classify_intent(message: str) -> Tuple[IntentType, Optional[JobCategory]]:
     """
-    Phân loại ý định của người dùng
-    
-    Args:
-        message: Tin nhắn từ người dùng
-        
-    Returns:
-        Tuple[IntentType, Optional[JobCategory]]: (loại ý định, danh mục công việc nếu có)
+    Phân loại ý định của người dùng bằng LLM (ưu tiên) hoặc Regex (fallback)
     """
     message_lower = message.lower().strip()
     
+    # 1. Thử phân loại bằng LLM để có độ chính xác cao nhất
+    from app.services.llm_service import generate_answer
+    import json
+    
+    system_prompt = f"""Bạn là một trợ lý phân loại ý định người dùng. 
+Dựa trên câu hỏi, hãy phân loại vào một trong hai nhóm:
+- CONSULTATION: Tư vấn nghề nghiệp, định hướng, lời khuyên, kỹ năng, xu hướng thị trường.
+- JOB_SUGGESTION: Tìm kiếm công việc cụ thể, gợi ý vị trí tuyển dụng.
+
+Cũng hãy xác định lĩnh vực (category) từ các giá trị: {", ".join([c.value for c in JobCategory])}.
+
+Chỉ trả về JSON theo định dạng: {{"intent": "CONSULTATION"|"JOB_SUGGESTION", "category": "value"}}.
+Câu hỏi: "{message}"
+"""
+    try:
+        response_text = await generate_answer(system_prompt)
+        # Làm sạch response để lấy JSON
+        json_match = re.search(r'\{.*\}', response_text.replace('\n', ''), re.DOTALL)
+        if json_match:
+            data = json.loads(json_match.group())
+            intent_str = data.get("intent", "").lower()
+            category_str = data.get("category", "").lower()
+            
+            intent = IntentType.CONSULTATION
+            if "job" in intent_str: intent = IntentType.JOB_SUGGESTION
+            
+            category = None
+            for c in JobCategory:
+                if c.value == category_str:
+                    category = c
+                    break
+            return intent, category
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"LLM Intent Classification failed, falling back to Regex: {e}")
+
+    # 2. Fallback sang Regex logic (như cũ)
     # Kiểm tra keywords tư vấn
     has_consultation_keyword = any(
         keyword in message_lower for keyword in CONSULTATION_KEYWORDS
@@ -134,28 +165,19 @@ def classify_intent(message: str) -> Tuple[IntentType, Optional[JobCategory]]:
         keyword in message_lower for keyword in JOB_SUGGESTION_KEYWORDS
     )
     
-    # Xác định danh mục công việc
     detected_category = None
     for category, keywords in CATEGORY_KEYWORDS.items():
         if any(keyword in message_lower for keyword in keywords):
             detected_category = category
             break
     
-    # Logic phân loại
     if has_job_suggestion_keyword and detected_category:
-        # Có từ khóa "tìm việc" + lĩnh vực cụ thể → Gợi ý công việc
         return IntentType.JOB_SUGGESTION, detected_category
-    
     elif has_consultation_keyword:
-        # Có từ khóa tư vấn → Tư vấn chung
         return IntentType.CONSULTATION, detected_category
-    
     elif detected_category and not has_consultation_keyword:
-        # Chỉ có lĩnh vực, không có từ khóa tư vấn → Có thể là gợi ý công việc
         return IntentType.JOB_SUGGESTION, detected_category
-    
     else:
-        # Không xác định được → Mặc định là tư vấn
         return IntentType.CONSULTATION, None
 
 
@@ -196,32 +218,35 @@ def get_optimized_prompt_instruction(intent: IntentType, category: Optional[JobC
     if intent == IntentType.CONSULTATION:
         category_name = category.value if category else "các lĩnh vực liên quan"
         return f"""
-===== YÊU CẦU TRẢ LỜI (Tư vấn nghề nghiệp - {category_name}) =====
-Hãy đưa ra lời tư vấn chuyên sâu dựa trên dữ liệu thực tế:
+===== HƯỚNG DẪN TƯ VẤN (Chuyên gia hướng nghiệp - {category_name}) =====
+Bạn là một chuyên gia tư vấn sự nghiệp tận tâm. Hãy phản hồi bằng giọng văn chuyên nghiệp nhưng gần gũi:
 
-1. Phân tích câu hỏi: Đưa ra nhận định dựa trên xu hướng thị trường (1-2 câu).
-2. Lời khuyên cụ thể: Các kỹ năng và lộ trình cần tập trung.
-3. MINH HỌA THỰC TẾ: Sử dụng thông tin từ danh sách công việc được cung cấp để đưa ra các ví dụ cụ thể về yêu cầu thực tế của nhà tuyển dụng.
-4. Hướng dẫn bước tiếp theo.
+1. Thấu hiểu: Nhận định về câu hỏi của người dùng và bối cảnh thị trường hiện tại.
+2. Lời khuyên trọng tâm: Chỉ ra những kỹ năng hoặc định hướng thực sự quan trọng.
+3. Dẫn chứng thực tế: Chọn 1-2 ví dụ từ danh sách công việc để minh họa cho lời khuyên (ví dụ: "Như bạn thấy ở vị trí X tại công ty Y, họ đang rất chú trọng kỹ năng Z...").
+4. Hành động: Gợi ý những bước đi cụ thể tiếp theo.
 
-LƯU Ý: Tuyệt đối không trả lời chung chung. Hãy dùng các job thực tế làm dẫn chứng cho lời khuyên.
+LƯU Ý: Không dùng các gạch đầu dòng cứng nhắc như báo cáo. Hãy viết như một bức thư tư vấn hoặc một cuộc trò chuyện chuyên sâu.
 """
     
     elif intent == IntentType.JOB_SUGGESTION:
-        category_name = category.value if category else "tất cả lĩnh vực"
         return f"""
-===== YÊU CẦU TRẢ LỜI (Gợi ý công việc - {category_name}) =====
-Hãy gợi ý công việc phù hợp:
+===== CHỈ DẪN TRÌNH BÀY CÔNG VIỆC =====
+Hãy phản hồi một cách chuyên nghiệp và đầy đủ thông tin theo cấu trúc sau:
 
-1. Giải thích tìm kiếm (1-2 câu)
-2. Danh sách công việc phù hợp (top 3):
-   - Tên công việc tại Công ty
-   - Địa điểm, mức lương
-   - Kỹ năng yêu cầu
-   - Lý do phù hợp
-3. Lời khuyên ứng tuyển (2-3 gợi ý)
+1. Lời chào: (VD: Chào bạn, tôi đã tìm thấy một số công việc rất phù hợp với yêu cầu của bạn:).
+2. Danh sách công việc phù hợp:
+   - **[Tên công việc] | [Tên công ty]**
+   - **Địa điểm**: [Địa điểm] | **Lương**: [Mức lương]
+   - **Mô tả**: [Tóm tắt ngắn gọn 1-2 dòng về công việc].
+   - **Yêu cầu chính**: [Liệt kê 2-3 yêu cầu quan trọng nhất].
+   - **Lý do phù hợp**: [Giải thích tại sao công việc này khớp với yêu cầu của người dùng].
+3. Lời kết: (VD: Bạn có muốn tìm hiểu thêm thông tin chi tiết về vị trí nào không?).
 
-LƯU Ý: Giải thích rõ TẠI SAO đề xuất mỗi công việc.
+LƯU Ý QUY TẮC:
+- Chỉ chọn ra tối đa 3 vị trí tốt nhất.
+- Trình bày thoáng, dễ đọc, sử dụng icon.
+- KHÔNG hiển thị các chỉ dẫn kỹ thuật (như "tối đa 3") trong văn bản trả lời.
 """
     
     else:

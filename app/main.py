@@ -22,8 +22,15 @@ async def lifespan(app: FastAPI):
             logger.info("Milvus Cloud connection verified.")
         else:
             logger.error("Failed to verify Milvus Cloud connection.")
+            
+        # Warm-up Embedding Model (BGE-M3)
+        from app.services.vector_service import get_embedding_model
+        logger.info("Warming up embedding model (BGE-M3)...")
+        get_embedding_model() # This loads the model into RAM
+        logger.info("Embedding model warmed up and ready.")
+        
     except Exception as e:
-        logger.error(f"Error during Milvus initialization: {e}")
+        logger.error(f"Error during initialization: {e}")
     
     logger.info("Startup complete")
     

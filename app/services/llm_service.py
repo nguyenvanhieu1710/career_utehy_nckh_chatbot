@@ -1,67 +1,99 @@
 import logging
+import asyncio
 from typing import Generator
 from google import genai
+from groq import AsyncGroq
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_client = None
+_gemini_client = None
+_groq_client = None
 
-def get_client():
-    """Get or create Gemini client (lazy-init để đọc key mới nhất từ .env)"""
-    global _client
-    if _client is None:
+def get_gemini_client():
+    global _gemini_client
+    if _gemini_client is None:
         key = settings.GEMINI_API_KEY
-        model = settings.GEMINI_MODEL
-        if not key:
-            logger.warning("GEMINI_API_KEY is missing. Gemini API will fail.")
-            return None
-        # logger.info(f"Initializing Gemini client | model={model} | key={key[:8]}...{key[-4:]}")
+        if not key: return None
         try:
-            _client = genai.Client(api_key=key)
+            _gemini_client = genai.Client(api_key=key)
         except Exception as e:
-            logger.error(f"Failed to initialize Gemini client: {str(e)}")
-            return None
-    return _client
+            logger.error(f"Failed to initialize Gemini: {e}")
+    return _gemini_client
+
+def get_groq_client():
+    global _groq_client
+    if _groq_client is None:
+        key = settings.GROQ_API_KEY
+        if not key: return None
+        try:
+            _groq_client = AsyncGroq(api_key=key)
+        except Exception as e:
+            logger.error(f"Failed to initialize Groq: {e}")
+    return _groq_client
 
 
-def generate_answer(prompt: str) -> str:
-    """
-    Generate answer from Gemini API using the modern SDK
-    """
-    c = get_client()
-    if not c:
-        return "Hệ thống AI chưa được cấu hình đúng. Vui lòng kiểm tra lại cấu hình."
+async def generate_answer(prompt: str) -> str:
+    """Thử Groq trước (tốc độ cao), nếu lỗi fallback sang Gemini"""
+    # 1. Thử Groq
+    c_groq = get_groq_client()
+    if c_groq:
+        try:
+            response = await c_groq.chat.completions.create(
+                model=settings.GROQ_MODEL,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            logger.warning(f"Groq failed, trying Gemini fallback: {e}")
 
-    try:
-        response = c.models.generate_content(
-            model=settings.GEMINI_MODEL,
-            contents=prompt
-        )
-        if response.text:
-            return response.text.strip()
-        return "Xin lỗi, tôi không thể tạo câu trả lời cho nội dung này."
-    except Exception as e:
-        logger.error(f"Unexpected error with Gemini: {str(e)}", exc_info=True)
-        return "Đã xảy ra lỗi không mong muốn. Vui lòng thử lại sau."
+    # 2. Fallback sang Gemini
+    c_gemini = get_gemini_client()
+    if c_gemini:
+        try:
+            response = c_gemini.models.generate_content(
+                model=settings.GEMINI_MODEL,
+                contents=prompt
+            )
+            if response.text: return response.text.strip()
+        except Exception as e:
+            logger.error(f"Both LLMs failed: {e}")
+    
+    return "Xin lỗi, hiện tại tôi đang gặp khó khăn khi kết nối với các mô hình ngôn ngữ. Vui lòng thử lại sau."
 
-def stream_answer(prompt: str) -> Generator[str, None, None]:
-    """
-    Generate answer from Gemini API (streaming) using the modern SDK
-    """
-    c = get_client()
-    if not c:
-        yield "Hệ thống AI chưa được cấu hình đúng."
-        return
+async def stream_answer(prompt: str) -> Generator[str, None, None]:
+    """Stream answer với Groq là Primary và Gemini là Fallback"""
+    # 1. Thử Groq Stream
+    c_groq = get_groq_client()
+    success = False
+    if c_groq:
+        try:
+            response = await c_groq.chat.completions.create(
+                model=settings.GROQ_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                stream=True
+            )
+            async for chunk in response:
+                content = chunk.choices[0].delta.content
+                if content:
+                    yield content
+            success = True
+        except Exception as e:
+            logger.warning(f"Groq stream failed, switching to Gemini: {e}")
 
-    try:
-        response = c.models.generate_content_stream(
-            model=settings.GEMINI_MODEL,
-            contents=prompt
-        )
-        for chunk in response:
-            if chunk.text:
-                yield chunk.text
-    except Exception as e:
-        logger.error(f"Streaming unexpected error with Gemini: {str(e)}", exc_info=True)
-        yield "Đã xảy ra lỗi không mong muốn trong quá trình tạo luồng dữ liệu."
+    if success: return
+
+    # 2. Fallback sang Gemini Stream
+    c_gemini = get_gemini_client()
+    if c_gemini:
+        try:
+            response = c_gemini.models.generate_content_stream(
+                model=settings.GEMINI_MODEL,
+                contents=prompt
+            )
+            for chunk in response:
+                if chunk.text:
+                    yield chunk.text
+        except Exception as e:
+            logger.error(f"Fallback Gemini stream also failed: {e}")
+            yield "Đã xảy ra lỗi kết nối với toàn bộ hệ thống AI."

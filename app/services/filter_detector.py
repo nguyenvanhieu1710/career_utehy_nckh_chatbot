@@ -19,6 +19,7 @@ class JobFilter:
     company_size: Optional[str] = None
     remote: Optional[bool] = None
     keywords: Optional[str] = None
+    category: Optional[str] = None
     
     def has_filters(self) -> bool:
         """Kiểm tra có bộ lọc nào không"""
@@ -28,7 +29,8 @@ class JobFilter:
             self.location is not None,
             self.company_size is not None,
             self.remote is not None,
-            self.keywords is not None
+            self.keywords is not None,
+            self.category is not None
         ])
     
     def to_dict(self) -> Dict[str, Any]:
@@ -39,7 +41,8 @@ class JobFilter:
             "location": self.location,
             "company_size": self.company_size,
             "remote": self.remote,
-            "keywords": self.keywords
+            "keywords": self.keywords,
+            "category": self.category
         }
 
 
@@ -103,6 +106,14 @@ class FilterDetector:
         "làm việc hybrid", "linh hoạt", "không cần đến văn phòng",
         "làm ở nhà", "làm việc trực tuyến", "không phải đi làm",
         "work from home", "hybrid working", "flexible working"
+    ]
+    
+    # Filler words to clean keywords
+    FILLER_WORDS = [
+        "tìm cho mình", "tìm kiếm", "cần tìm", "cho mình", "các công việc", 
+        "việc làm", "tuyển dụng", "vị trí", "công việc", "lập trình",
+        "có mức", "mức lương", "lương từ", "khoảng", "trở lên", "tại", "ở",
+        "tìm", "cho", "cần", "có", "mức", "lương", "tại", "ở", "về", "với"
     ]
     
     def detect_filters(self, query: str) -> JobFilter:
@@ -222,6 +233,12 @@ class FilterDetector:
         # Remove remote keywords
         for keyword in self.REMOTE_KEYWORDS:
             keywords = keywords.replace(keyword, "")
+            
+        # Remove filler words (Case-insensitive)
+        for filler in self.FILLER_WORDS:
+            # Sử dụng regex để thay thế không phân biệt hoa thường
+            pattern = re.compile(re.escape(filler), re.IGNORECASE)
+            keywords = pattern.sub("", keywords)
         
         # Clean up
         keywords = re.sub(r'\s+', ' ', keywords).strip()
