@@ -153,6 +153,51 @@ async def sync_to_milvus():
         logger.error(f"Sync failed: {e}")
         return False
 
+async def sync_jobs_to_milvus(job_ids: List[str]):
+    """Syncs specific PG jobs to Milvus with job_type as category tag"""
+    if not job_ids:
+        return True
+    
+    if not ensure_collection_exists(): return False
+    client = get_milvus_client()
+    
+    try:
+        async with SessionLocal() as db:
+            query = text("""
+                SELECT j.id, j.title, c.name as company, j.description, j.skills, 
+                       j.location, j.requirements, j.job_type
+                FROM jobs j JOIN companies c ON j.company_id = c.id
+                WHERE j.id = ANY(:job_ids)
+            """)
+            rows = (await db.execute(query, {"job_ids": job_ids})).fetchall()
+            
+            if not rows: 
+                logger.info("No matching jobs found in DB for the provided job_ids.")
+                return True
+            
+            logger.info(f"Incremental Syncing {len(rows)} jobs to Milvus...")
+            batch = []
+            for r in rows:
+                content = f"{r.title} {r.company} {r.description or ''} {r.skills or ''} {r.location or ''} {r.requirements or ''}"
+                vector = get_embedding(content)
+                batch.append({
+                    "job_id": str(r.id),
+                    "vector": vector,
+                    "category": r.job_type or "OTHER"
+                })
+                
+                if len(batch) >= 50:
+                    client.upsert(collection_name=settings.MILVUS_COLLECTION, data=batch)
+                    batch = []
+            
+            if batch:
+                client.upsert(collection_name=settings.MILVUS_COLLECTION, data=batch)
+            logger.info(f"Incremental Sync complete: {len(rows)} jobs indexed to Milvus.")
+            return True
+    except Exception as e:
+        logger.error(f"Incremental Sync failed: {e}")
+        return False
+
 # --- Search & Detail Mapping ---
 
 

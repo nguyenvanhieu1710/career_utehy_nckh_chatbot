@@ -1,4 +1,4 @@
-50 CÂU HỎI DEMO
+GỢI Ý VIỆC LÀM
 ==================================
 
 LƯƠNG THEO KHOẢNG:
@@ -64,3 +64,70 @@ THEO KỸ NĂNG:
 48. việc làm yêu cầu kỹ năng React
 49. công việc cần kinh nghiệm Digital Marketing
 50. job yêu cầu biết SQL
+
+TƯ VẤN HƯỚNG NGHIỆP:
+==================================
+
+LỘ TRÌNH NGHỀ NGHIỆP:
+51. lộ trình để trở thành lập trình viên Python
+52. tôi muốn làm data scientist thì cần học gì
+53. con đường phát triển của một kỹ sư phần mềm
+54. làm thế nào để trở thành senior developer
+55. lộ trình học UI/UX designer từ đầu
+56. muốn chuyển sang làm DevOps thì bắt đầu từ đâu
+57. lộ trình trở thành product manager
+58. tôi học kế toán có thể chuyển sang làm gì trong IT
+
+KỸ NĂNG CẦN HỌC:
+59. kỹ năng nào quan trọng nhất cho lập trình viên backend
+60. tôi cần học gì để làm việc ở công ty nước ngoài
+61. kỹ năng mềm nào cần thiết cho dân IT
+62. học ngôn ngữ lập trình nào dễ xin việc nhất hiện nay
+63. framework nào đang được tuyển dụng nhiều nhất
+64. tôi cần chứng chỉ gì để làm cloud engineer
+65. kỹ năng SQL có quan trọng với data analyst không
+66. nên học React hay Vue cho frontend developer
+
+SO SÁNH NGÀNH NGHỀ:
+67. data analyst và data scientist khác nhau như thế nào
+68. backend developer và fullstack developer nên chọn cái nào
+69. làm IT hay làm marketing lương cao hơn
+70. sự khác biệt giữa UX designer và UI designer
+71. DevOps và SRE khác nhau như thế nào
+72. product manager và project manager vai trò khác nhau ra sao
+73. nên làm freelance hay đi làm công ty
+
+MỨC LƯƠNG & THỊ TRƯỜNG:
+74. lương trung bình của lập trình viên Python hiện nay là bao nhiêu
+75. ngành nào đang có nhu cầu tuyển dụng cao nhất
+76. lương data engineer ở Việt Nam khoảng bao nhiêu
+77. kỹ sư AI lương bao nhiêu ở Hà Nội
+78. ngành IT có dễ xin việc không
+79. thị trường tuyển dụng marketing digital đang như thế nào
+80. lương fresher developer mới ra trường thường là bao nhiêu
+
+PHỎNG VẤN & ỨNG TUYỂN:
+81. cách viết CV xin việc lập trình viên ấn tượng
+82. câu hỏi phỏng vấn thường gặp cho vị trí frontend developer
+83. làm thế nào để vượt qua vòng phỏng vấn kỹ thuật
+84. nên đưa gì vào portfolio cho designer
+85. cách trả lời câu hỏi "điểm yếu của bạn là gì" khi phỏng vấn
+86. thư xin việc cover letter nên viết như thế nào
+87. làm thế nào để thương lượng lương khi nhận offer
+88. nên apply bao nhiêu công ty cùng lúc
+
+PHÁT TRIỂN BẢN THÂN:
+89. làm thế nào để tăng lương nhanh trong ngành IT
+90. cách xây dựng personal brand cho lập trình viên
+91. có nên học thêm bằng thạc sĩ khi đang đi làm không
+92. làm thế nào để chuyển việc mà không bị gap CV
+93. cách học lập trình hiệu quả khi đi làm full-time
+94. nên tham gia cộng đồng nào để networking trong ngành IT
+95. làm thế nào để được thăng chức lên team lead
+
+ĐỊNH HƯỚNG CHO SINH VIÊN:
+96. sinh viên năm 3 CNTT nên chuẩn bị gì để đi thực tập
+97. mới ra trường nên ưu tiên startup hay công ty lớn
+98. sinh viên không có kinh nghiệm làm thế nào để xin được việc
+99. nên đi làm thêm part-time khi còn đi học không
+100. tôi học trái ngành có thể tự học để làm IT được không

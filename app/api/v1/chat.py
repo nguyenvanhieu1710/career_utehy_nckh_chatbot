@@ -1,12 +1,14 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from typing import AsyncGenerator
+from typing import AsyncGenerator, List
+from pydantic import BaseModel
 import logging
 
 import time
 from app.models.chat import ChatRequest, ChatResponse
 from app.services.vector_service import (
     sync_to_milvus,
+    sync_jobs_to_milvus,
     get_milvus_stats
 )
 from app.services.search.orchestrator import search_jobs as hybrid_search
@@ -95,3 +97,16 @@ async def sync_milvus_endpoint():
     if success:
         return {"message": "Data synchronized to Milvus Cloud successfully"}
     raise HTTPException(status_code=500, detail="Failed to sync data to Milvus")
+
+class SyncJobsRequest(BaseModel):
+    job_ids: List[str]
+
+@router.post("/sync-new-jobs")
+async def sync_new_jobs_endpoint(request: SyncJobsRequest):
+    """
+    Trigger incremental synchronization of new PostgreSQL jobs to Milvus Cloud.
+    """
+    success = await sync_jobs_to_milvus(request.job_ids)
+    if success:
+        return {"message": "New data synchronized to Milvus Cloud successfully"}
+    raise HTTPException(status_code=500, detail="Failed to incrementally sync data to Milvus")
